@@ -5,3 +5,4 @@ pyvenv.cfg
 .idea/
 bot.log
 settings.py
+__pycache__/
