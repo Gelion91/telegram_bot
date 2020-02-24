@@ -6,3 +6,4 @@ pyvenv.cfg
 bot.log
 settings.py
 __pycache__/
+users.txt

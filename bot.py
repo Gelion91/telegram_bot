@@ -1,11 +1,13 @@
 import re
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+import time
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
+from threading import Thread
 import logging
 import settings
 import ephem
 import datetime
 import city
-import sys
+
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
                     level=logging.INFO,
                     filename='bot.log')
@@ -67,7 +69,12 @@ def full_moon(bot, update):
 
 
 def cities(bot, update):
+    with open('users.txt', 'r+', encoding='utf-8') as file:
+        content = file.read()
+        if str(update.message.chat.id) not in content:
+            file.write(str(update.message.chat.id) + '\n')
     user_text = update.message.text.split()
+    print(update.message)
     text = user_text[-1]
     print(text)
     print(user_text)
@@ -77,21 +84,13 @@ def cities(bot, update):
         if name[0].lower() == text[-1]:
             update.message.reply_text(name)
             city.russian_cities.remove(name)
-        elif name[0].lower() == text[-2]:
-            print(name)
-            update.message.reply_text(name)
-            city.russian_cities.remove(name)
         else:
-            update.message.reply_text('Попробуйте еще раз.')
+            continue
         break
-
-
-
 
 
 def main():
     """Тело бота"""
-
     mybot = Updater(settings.API_KEY, request_kwargs=settings.PROXY)
     logging.info('Бот запускается')
     dp = mybot.dispatcher
