@@ -1,7 +1,7 @@
 import re
-import time
+
+from telegram import ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
-from threading import Thread
 import logging
 import settings
 import ephem
@@ -12,30 +12,14 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
                     level=logging.INFO,
                     filename='bot.log')
 
+reply_keyboard = [['Поиграть в города'],['Когда полнолуние'], ['Количество слов'], ['Все команды']]
+keyboard = ReplyKeyboardMarkup(reply_keyboard,resize_keyboard=True, one_time_keyboard=False)
+exit_keyboard = ReplyKeyboardMarkup([['выход']], resize_keyboard=True, one_time_keyboard=True)
 
-def greet_user(bot, update):
-    """комманда /start приветствует пользователя"""
-
-    text = 'Добро пожаловать!\n/list - список доступных комманд'
-    logging.info(text)
-    update.message.reply_text(text)
+YOUR_TURN, ANSWER, COUNT = range(3)
 
 
-def talk_to_me(bot, update):
-    """обрабатывает неизвестные команды
-    сохраняет в bot.log данные о пользователе."""
-
-    user_text = 'Привет! Введите /start или /planet <Название планеты>'
-    logging.info('User: %s, chat id: %s, Message: %s',
-                 update.message.chat.username,
-                 update.message.chat.id,
-                 update.message.text
-                 )
-    update.message.reply_text(user_text)
-    update.message.reply_text('/list - список доступных комманд')
-
-
-def planet_info(bot, update):
+def planet_info(update, context):
     """Принимает команду от пользователя и выводит результат о местонахождении планеты"""
 
     your_question = update.message.text.split()
@@ -44,7 +28,7 @@ def planet_info(bot, update):
     update.message.reply_text(f'Сегодня {your_question[-1]} находится в созведии {constellation[-1]}')
 
 
-def list_planet(bot, update):
+def help_list(update, context):
     """Выводит список доступных команд"""
     for i in ephem._libastro.builtin_planets():
         if 'Planet' in i:
@@ -54,53 +38,89 @@ def list_planet(bot, update):
     update.message.reply_text(text)
 
 
-def counter(bot, update):
+def counter(update, context):
+    update.message.reply_text('Введите предложение в котором надо посчитать слова.')
+    return COUNT
+
+
+def numbers(update, context):
     """ Выводит количество слов """
     user_text = re.sub(r"[,./_()""*:;]", "", update.message.text)
     format_text = user_text.split()
     print(format_text)
     logging.info('Message: %s', update.message.text)
-    update.message.reply_text(len(format_text)-1)
+    update.message.reply_text(len(format_text))
+    return YOUR_TURN
 
 
-def full_moon(bot, update):
+def full_moon(update, context):
+    """ Выводит ближайшее полнолуние """
     answer = ephem.next_full_moon(datetime.date.today())
     update.message.reply_text(answer)
 
 
-def cities(bot, update):
-    with open('users.txt', 'r+', encoding='utf-8') as file:
-        content = file.read()
-        if str(update.message.chat.id) not in content:
-            file.write(str(update.message.chat.id) + '\n')
-    user_text = update.message.text.split()
-    print(update.message)
-    text = user_text[-1]
-    print(text)
-    print(user_text)
-    if text in city.russian_cities:
-        city.russian_cities.remove(text)
-    for name in city.russian_cities:
-        if name[0].lower() == text[-1]:
-            update.message.reply_text(name)
-            city.russian_cities.remove(name)
-        else:
-            continue
-        break
+def start(update, context):
+    """ Открывает клавиатуру с выбором команды """
+    update.message.reply_text('Привет! Что бы ты хотел сделать?', reply_markup=keyboard)
+    return YOUR_TURN
+
+
+def cities(update, context):
+    """ Стартует игру в города"""
+    update.message.reply_text('Твой ход!', reply_markup=exit_keyboard)
+    user_data = context.user_data
+    user_data['city'] = []
+    user_data['count'] = 0
+    return ANSWER
+
+
+def received_information(update, context):
+    """ Основное тело игры """
+    text = update.message.text
+    user_data = context.user_data
+    user_data['count'] += 1
+    if text == 'выход':
+        update.message.reply_text("Пока играли, были названы города: {}".format(user_data['city']))
+        user_data.clear()
+        return ConversationHandler.END
+    if text not in user_data['city'] and \
+            (user_data['count'] < 2 or text[0].lower() == user_data['city'][-1].strip('ьый')[-1]) and \
+            text in city.russian_cities:
+        user_data.setdefault('city', []).append(text)
+        update.message.reply_text("Да город {} есть!".format(text))
+        text = text.rstrip('ьый')
+        for name in city.russian_cities:
+            if name[0].lower() != text[-1] or name in user_data['city']:
+                continue
+            else:
+                update.message.reply_text(f'Тааак... мне город на {text[-1]}\nО! Придумал: {name}')
+                user_data['city'].append(name)
+            break
+    else:
+        update.message.reply_text("Давай играть по правилам!!!")
 
 
 def main():
     """Тело бота"""
-    mybot = Updater(settings.API_KEY, request_kwargs=settings.PROXY)
+    mybot = Updater(settings.API_KEY, request_kwargs=settings.PROXY, use_context=True)
     logging.info('Бот запускается')
     dp = mybot.dispatcher
-    dp.add_handler(CommandHandler('start', greet_user))
     dp.add_handler(CommandHandler('planet', planet_info))
-    dp.add_handler(CommandHandler('list', list_planet))
     dp.add_handler(CommandHandler('wordcount', counter))
     dp.add_handler(CommandHandler('next_full_moon', full_moon))
-    dp.add_handler(CommandHandler('cities', cities))
-    dp.add_handler(MessageHandler(Filters.text, talk_to_me))
+    dp.add_handler(ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+
+        states={
+            YOUR_TURN: [MessageHandler(Filters.regex('Поиграть в города'), cities),
+                        MessageHandler(Filters.regex('Когда полнолуние'), full_moon),
+                        MessageHandler(Filters.regex('Количество слов'), counter),
+                        MessageHandler(Filters.regex('Все команды'), help_list)],
+            ANSWER: ([MessageHandler(Filters.text, received_information)]),
+            COUNT: ([MessageHandler(Filters.text, numbers)])
+        },
+        fallbacks=[])
+    )
     mybot.start_polling()
     mybot.idle()
 
