@@ -7,3 +7,4 @@ bot.log
 settings.py
 __pycache__/
 users.txt
+downloads

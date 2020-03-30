@@ -1,16 +1,20 @@
 import datetime
 import logging
+import os
 import re
 from glob import glob
 from random import choice
 import ephem
 from telegram.ext import ConversationHandler
+from telegram.ext import messagequeue as mq
 import city
-from utils import get_user_emo, get_keyboard, exit_keyboard, keyboard, YOUR_TURN, ANSWER, COUNT
+from utils import get_user_emo, get_keyboard, exit_keyboard, keyboard, YOUR_TURN, ANSWER, COUNT, is_cat
+from bot import subscribers
 
 
 def greet_user(update, context):
     user_data = context.user_data
+    print(update.message.chat_id)
     emo = get_user_emo(user_data)
     user_data['emo'] = emo
     text = 'Привет {}'.format(emo)
@@ -53,7 +57,7 @@ def planet_information(update, context):
 
 
 def help_list(update, context):
-    """Выводит список доступных команд"""
+    """Выводит список доступных команд к которым применима функция planet_information"""
     for i in ephem._libastro.builtin_planets():
         if 'Planet' in i:
             update.message.reply_text('/planet ' + i[-1])
@@ -124,3 +128,32 @@ def received_information(update, context):
             break
     else:
         update.message.reply_text("Давай играть по правилам!!!")
+
+
+def check_user_photo(update, context):
+    update.message.reply_text('Обрабатываю фото')
+    os.makedirs('downloads', exist_ok=True)
+    photo_file = context.bot.getFile(update.message.photo[-1].file_id)
+    filename = os.path.join('downloads', '{}.jpg'.format(photo_file.file_id))
+    photo_file.download(filename)
+    answer = is_cat(filename)
+    update.message.reply_text(answer)
+
+
+def subscribe(update, context):
+    subscribers.add(update.message.chat_id)
+    update.message.reply_text("Вы подписались, наберите /unsubscribe чтобы отписаться.")
+
+
+def unsubscribe(update, context):
+    if update.message.chat_id in subscribers:
+        subscribers.remove(update.message.chat_id)
+        update.message.reply_text("Вы отписались, наберите /subscribe чтобы подписаться.")
+    else:
+        update.message.reply_text('Вы не подписаны.')
+
+
+@mq.queuedmessage
+def send_updates(context):
+    for chat_id in subscribers:
+        context.bot.sendMessage(chat_id=chat_id, text="Привет!")
