@@ -1,6 +1,5 @@
-import logging
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
-from telegram.ext import messagequeue as mq
+
 import settings
 from my_handlers import *
 from utils import YOUR_TURN, ANSWER, COUNT
@@ -25,9 +24,7 @@ def my_test(context):
 def main():
     """Тело бота"""
     mybot = Updater(settings.API_KEY, request_kwargs=settings.PROXY, use_context=True)
-    mybot.bot._msg_queue = mq.MessageQueue()
-    mybot.bot._is_messages_queued_default = True
-    mybot.job_queue.run_repeating(send_updates, interval=5)
+    mybot.job_queue.run_repeating(send_updates, interval=15)
 
     logging.info('Бот запускается')
     dp = mybot.dispatcher

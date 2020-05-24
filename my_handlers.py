@@ -153,7 +153,6 @@ def unsubscribe(update, context):
         update.message.reply_text('Вы не подписаны.')
 
 
-@mq.queuedmessage
 def send_updates(context):
     for chat_id in subscribers:
         context.bot.sendMessage(chat_id=chat_id, text="Привет!")
